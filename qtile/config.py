@@ -1,4 +1,28 @@
-# By Sprinter05
+# Copyright (c) 2010 Aldo Cortesi
+# Copyright (c) 2010, 2014 dequis
+# Copyright (c) 2012 Randall Ma
+# Copyright (c) 2012-2014 Tycho Andersen
+# Copyright (c) 2012 Craig Barnes
+# Copyright (c) 2013 horsik
+# Copyright (c) 2013 Tao Sauvage
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
 
 # Imports
 import os
@@ -7,7 +31,8 @@ import socket
 from datetime import datetime
 
 # qtile base
-from libqtile import bar, layout, widget, hook
+from libqtile import bar, layout, widget, hook, qtile
+from libqtile.backend.wayland import InputConfig
 from libqtile.config import Click, Drag, Group, Key, Match, Screen
 from libqtile.lazy import lazy
 
@@ -25,6 +50,19 @@ from decors import *
 @hook.subscribe.startup_once
 def autostart_once():
     subprocess.run('/home/sprinter/.config/qtile/autostart.sh')
+
+def dunst_sus():
+    status = subprocess.check_output(['dunstctl', 'is-paused']).strip()
+    if status == b'true':
+        return True
+    return False
+
+@hook.subscribe.client_new
+def center_floating_win(window):
+    wm_name = window.inspect()["name"]
+    if wm_name == "xmessage":
+        window.toggle_floating()
+        window.bring_to_front()
 
 # Define my applications for shortcuts
 mod = "mod4"
@@ -45,6 +83,16 @@ confedit = '/home/sprinter/Scripts/confedit.sh'
 emojipick = 'rofimoji --max-recent 0 --selector-args "-config ~/.config/rofi/emoji.rasi"'
 calculator= f'= --dmenu="dmenu -sb {colors_fg[9]} -sf {colors_bg[1]} -nb {colors_bg[1]} -nf {colors_bg[0]} -fn JetBrainsMono-20"'
 
+# Define values
+b_width = 2
+mar_g = 4
+
+# Wayland keyboard layout
+if qtile.core.name == "qtile":
+    wl_input_rules = {
+        "type:keyboard": InputConfig(kb_layout="es"),
+    }
+
 # Keyboard keys
 keys = [
     # A list of available commands that can be bound to keys can be found
@@ -52,7 +100,7 @@ keys = [
     # Cheat sheet at https://github.com/qtile/qtile/blob/master/libqtile/backend/x11/xkeysyms.py
 
     # Window management
-    Key([mod, "control"], "Down", lazy.window.toggle_minimize(), desc="Minimize window"),
+    Key([mod, "control"], "Down", lazy.window.toggle_minimize(), desc="Minimize windbow"),
     Key([mod, "control"], "Up", lazy.window.toggle_maximize(), desc="Maximize window"),
     Key([mod, "control"], "Left", lazy.layout.client_to_previous(), desc="Change to left stack"),
     Key([mod, "control"], "Right", lazy.layout.client_to_next(), desc="Change to right stack"),
@@ -61,6 +109,7 @@ keys = [
     Key([mod, "shift"], "Return", lazy.layout.toggle_split(), desc="Toggle between split and unsplit sides of stack",),
     Key([mod], "f", lazy.window.toggle_fullscreen(), desc="Toggle fullscreen"),
     Key([mod], "w", lazy.window.kill(), desc="Kill focused window"),
+    Key([mod, "shift"], "b", lazy.hide_show_bar(), desc="Hides the bar"),
 
     # Window switching
     Key([mod], "Left", lazy.layout.left(), desc="Move focus to left"),
@@ -151,15 +200,15 @@ layouts = [
     layout.Columns(
         border_focus = colors_fg[2],
         border_normal = colors_bg[7],
-        border_width = 3,
-        margin = 4,
+        border_width = b_width,
+        margin = mar_g,
         border_on_single = False,
     ),
     layout.MonadTall(
         border_focus = colors_fg[2],
         border_normal = colors_bg[7],
-        border_width = 3,
-        margin = 4,
+        border_width = b_width,
+        margin = mar_g,
         align = 0,
         ratio = 0.6,
         new_client_position = 'bottom',
@@ -167,19 +216,19 @@ layouts = [
     layout.Stack(
         border_focus = colors_fg[2],
         border_normal = colors_bg[7],
-        border_width = 3,
-        margin = 4,
+        border_width = b_width,
+        margin = mar_g,
         border_on_single = False,
     ),
     layout.Zoomy(
         border_focus = colors_fg[2],
         border_normal = colors_bg[7],
-        border_width = 3,
-        margin = 4,
+        border_width = b_width,
+        margin = mar_g,
         border_on_single = False,
     ),
     layout.Max(
-        margin = 4
+        margin = mar_g
     ),
 ]
 
@@ -197,7 +246,7 @@ floating_layout = layout.Floating(
     ],
     border_focus = colors_fg[6],
     border_normal = colors_bg[7],
-    border_width = 3,
+    border_width = b_width,
     border_on_single = False,
 )
 
@@ -222,7 +271,7 @@ fonts = {
 screens = [
     Screen( 
         top=bar.Bar(
-            [
+            [   
                 # Arch Linux logo
                 widget.Sep(
                     linewidth = 0,
@@ -298,7 +347,19 @@ screens = [
                 ),
 
                 # SPACE HERE #
-
+                # Do Not Disturb
+                widget.DoNotDisturb(
+                    enabled_icon="󰂛",
+                    disabled_icon="󰂚",
+                    fontsize=17,
+                    background=colors_bg[2],
+                    update_interval = 0.5,
+                ),
+                widget.Sep(
+                    linewidth = 0,
+                    padding = 1,
+                    background=colors_bg[2],
+                ),
                 # System Tray
                 widget.Systray(
                     background=colors_bg[2],
@@ -332,11 +393,13 @@ screens = [
                     fontsize=18,
                     foreground=colors_bg[1],
                     padding=6,
+                    device='default',
                     step=1,
                 ),
                 widget.PulseVolume(
                     **dectext,
                     foreground=colors_bg[5],
+                    channel='Master',
                     step=1,
                 ),
                 widget.Sep(
@@ -407,7 +470,7 @@ screens = [
                     foreground=colors_bg[5],
                     format='{essid}',
                     interface='wlan0',
-                    ethernet_interface='eno4',
+                    ethernet_interface='eno1',
                     disconnected_message='Disconnected',
                     use_ethernet=True,
                     ethernet_message='Ethernet',
@@ -454,7 +517,8 @@ screens = [
                 ),
             ],
             size = 26,
-            margin=4,
+            margin = mar_g,
+            background=colors_bg[2]
         ),
     ),
 ]
