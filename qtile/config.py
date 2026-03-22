@@ -1,30 +1,38 @@
-# By Sprinter05
+# By: Sprinter05
 
 # Imports
 import os
 import subprocess
 import socket
+import time
 from datetime import datetime
 
 # qtile base
 from libqtile import bar, layout, widget, hook, qtile
-from libqtile.backend.wayland import InputConfig
 from libqtile.config import Click, Drag, Group, Key, Match, Screen
 from libqtile.lazy import lazy
+
+if qtile.core.name == "wayland":
+    from libqtile.backend.wayland.inputs import InputConfig
 
 # qtile extras (https://github.com/elParaguayo/qtile-extras)
 from qtile_extras import widget as extrawidget
 from qtile_extras.widget import modify
-from qtile_extras.popup.toolkit import PopupRelativeLayout, PopupText, PopupWidget
-from qtile_extras.widget.mixins import ExtendedPopupMixin
 from qtile_extras import *
 
 # Files with data
 from colors import *
 from decors import *
+import constants
 
+# Widgets
+if qtile.core.name == "wayland":
+    import wl_widgets
+elif qtile.core.name == "x11":
+    import x11_widgets
+    
 @hook.subscribe.startup_once
-def autostart_once():
+def autostart():
     subprocess.run('/home/sprinter/.config/qtile/autostart.sh')
 
 def dunst_sus():
@@ -33,12 +41,27 @@ def dunst_sus():
         return True
     return False
 
-@hook.subscribe.client_new
-def center_floating_win(window):
-    wm_name = window.inspect()["name"]
-    if wm_name == "xmessage":
-        window.toggle_floating()
-        window.bring_to_front()
+@lazy.function
+def window_to_prev_group(qtile):
+    i = qtile.groups.index(qtile.current_group)
+    if qtile.current_window is not None and i != 0:
+        qtile.current_window.togroup(qtile.groups[i - 1].name)
+        qtile.current_screen.toggle_group(qtile.groups[i - 1])
+
+@lazy.function
+def window_to_next_group(qtile):
+    i = qtile.groups.index(qtile.current_group)
+    if qtile.current_window is not None and i != 6:
+        qtile.current_window.togroup(qtile.groups[i + 1].name)
+        qtile.current_screen.toggle_group(qtile.groups[i + 1])
+
+# Old function, using floating rules now
+#@hook.subscribe.client_new
+#def center_floating_win(window):
+#    wm_name = window.inspect()["name"]
+#    if wm_name == "xmessage" or wm_name == :
+#        window.toggle_floating()
+#        window.bring_to_front()
 
 # Define my applications for shortcuts
 mod = "mod4"
@@ -49,24 +72,23 @@ screenshot = "flameshot gui"
 pulsemix = "alacritty -e pulsemixer"
 taskmanager = "alacritty -e btop"
 gputaskmanager = "alacritty -e nvtop"
-fastmusic = "/home/sprinter/Scripts/mpc.sh"
-musicplayer = "alacritty -e ncmpcpp"
+# fastmusic = "/home/sprinter/Scripts/mpc.sh"
+# musicplayer = "alacritty -e ncmpcpp"
 screenlock = "betterlockscreen -l"
 applauncher = "rofi -show drun"
-clipboard = 'rofi-gpaste'
+#clipboard = "xtrace /usr/bin/rofi-gpaste"
+clipboard = "rofi -modi 'clipboard:greenclip print' -show clipboard -config ~/.config/rofi/clip.rasi"
+# clipboard = "rofi-greenclip"
 confedit = '/home/sprinter/Scripts/confedit.sh'
+# alttab = '/home/sprinter/Scripts/alttab.sh'
 #alttab = "/home/sprinter/alt.sh"
-emojipick = 'rofimoji --max-recent 0 --selector-args "-config ~/.config/rofi/emoji.rasi"'
-calculator= f'= --dmenu="dmenu -sb {colors_fg[9]} -sf {colors_bg[1]} -nb {colors_bg[1]} -nf {colors_bg[0]} -fn JetBrainsMono-20"'
-
-# Define values
-b_width = 2
-mar_g = 4
+# emojipick = 'rofimoji --max-recent 0 --selector-args "-config ~/.config/rofi/emoji.rasi"'
+# calculator= f'= --dmenu="dmenu -sb {colors_fg[9]} -sf {colors_bg[1]} -nb {colors_bg[1]} -nf {colors_bg[0]} -fn JetBrainsMono-20"'
 
 # Wayland keyboard layout
-if qtile.core.name == "qtile":
+if qtile.core.name == "wayland":
     wl_input_rules = {
-        "type:keyboard": InputConfig(kb_layout="es"),
+        "type:keyboard": InputConfig(kb_layout="es", kb_repeat_delay=250, kb_repeat_rate=25),
     }
 
 # Keyboard keys
@@ -93,8 +115,10 @@ keys = [
     Key([mod], "Down", lazy.layout.down(), desc="Move focus down"),
     Key([mod], "Up", lazy.layout.up(), desc="Move focus up"),
     # Replaced with "alttab" (https://github.com/sagb/alttab)
-    #Key(["mod1"], "Tab", lazy.group.next_window(), desc="Move window focus to next window"),
-    #Key(["mod1", "shift"], "Tab", lazy.group.previous_window(), desc="Move window focus to next window"),
+    Key(["mod1"], "Tab", lazy.group.next_window(), desc="Move window focus to next window"),
+    Key(["mod1", "shift"], "Tab", lazy.group.prev_window(), desc="Move window focus to previous window"),
+    # Key(["mod1"], "Tab", lazy.spawn(alttab), desc="Move window focus to next window"),
+    # Key(["mod1"], "Tab", lazy.group.previous_window(), desc="Move window focus to next window"),
 
     # Window placement
     Key([mod, "shift"], "Left", lazy.layout.shuffle_left(), desc="Move window to the left"),
@@ -114,19 +138,19 @@ keys = [
     Key([mod], "r", lazy.spawncmd(), desc="Spawn a command using a prompt widget"),
     Key([], "Print", lazy.spawn(screenshot), desc="Take a screenshot"),
     Key([mod], "Return", lazy.spawn(terminal), desc="Launch terminal"),
-    Key([mod], "Space", lazy.spawn(calculator), desc="Launch terminal"),
+    # Key([mod], "Space", lazy.spawn(calculator), desc="Launch calculator"),
     Key([mod], "b", lazy.spawn(browser), desc="Launch browser"),
     Key([mod], "e", lazy.spawn(explorer), desc="Launch file explorer"),
     Key([mod], "s", lazy.spawn(pulsemix), desc="Launch sound mixer"),
-    Key([mod], "m", lazy.spawn(fastmusic), desc="Launch mpc rofi selector"),
-    Key([mod, "shift"], "m", lazy.spawn(musicplayer), desc="Launch mpd music player"),
+    # Key([mod], "m", lazy.spawn(fastmusic), desc="Launch mpc rofi selector"),
+    # Key([mod, "shift"], "m", lazy.spawn(musicplayer), desc="Launch mpd music player"),
     Key([mod, "shift"], "c", lazy.spawn(confedit), desc="Edit a config folder with code"),
     Key([mod], "t", lazy.spawn(taskmanager), desc="Launch task top"),
     Key([mod, "shift"], "t", lazy.spawn(gputaskmanager), desc="Launch GPU top"),
     Key([mod], "l", lazy.spawn(screenlock), desc="Lock Screen with i3lock"),
     Key([mod], "a", lazy.spawn(applauncher), desc="App Launcher with rofi"),
     Key([mod], "v", lazy.spawn(clipboard), desc="Clipboard with rofi and greenclip"),
-    Key([mod], "period", lazy.spawn(emojipick), desc="Pick emojis with rofi"),
+    # Key([mod], "period", lazy.spawn(emojipick), desc="Pick emojis with rofi"),
 
     # Layout management
     Key([mod], "Tab", lazy.next_layout(), desc="Toggle between layouts"),
@@ -151,6 +175,8 @@ keys = [
     Key([mod], "4", lazy.group["4"].toscreen(), desc="Move to group 4"),
     Key([mod], "5", lazy.group["5"].toscreen(), desc="Move to group 5"),
     Key([mod], "6", lazy.group["6"].toscreen(), desc="Move to group 6"),
+    # Key([mod], "7", lazy.group["7"].toscreen(), desc="Move to group 7"),
+    # Key([mod], "8", lazy.group["8"].toscreen(), desc="Move to group 8"),
 ]
 
 # Mouse keys
@@ -169,6 +195,8 @@ groups =[
     Group("4", label = ""),
     Group("5", label = ""),
     Group("6", label = ""),
+    # Group("7", label = ""),
+    # Group("8", label = ""),
 ]
 
 # Layouts that I use
@@ -176,15 +204,15 @@ layouts = [
     layout.Columns(
         border_focus = colors_fg[2],
         border_normal = colors_bg[7],
-        border_width = b_width,
-        margin = mar_g,
+        border_width = constants.b_width,
+        margin = constants.mar_g,
         border_on_single = False,
     ),
     layout.MonadTall(
         border_focus = colors_fg[2],
         border_normal = colors_bg[7],
-        border_width = b_width,
-        margin = mar_g,
+        border_width = constants.b_width,
+        margin = constants.mar_g,
         align = 0,
         ratio = 0.6,
         new_client_position = 'bottom',
@@ -192,19 +220,19 @@ layouts = [
     layout.Stack(
         border_focus = colors_fg[2],
         border_normal = colors_bg[7],
-        border_width = b_width,
-        margin = mar_g,
+        border_width = constants.b_width,
+        margin = constants.mar_g,
         border_on_single = False,
     ),
     layout.Zoomy(
         border_focus = colors_fg[2],
         border_normal = colors_bg[7],
-        border_width = b_width,
-        margin = mar_g,
+        border_width = constants.b_width,
+        margin = constants.mar_g,
         border_on_single = False,
     ),
     layout.Max(
-        margin = mar_g
+        margin = constants.mar_g
     ),
 ]
 
@@ -219,10 +247,12 @@ floating_layout = layout.Floating(
         Match(wm_class="ssh-askpass"),  # ssh-askpass
         Match(title="branchdialog"),  # gitk
         Match(title="pinentry"),  # GPG key password entry
+        Match(title="xmessage"), # x message popups
+        Match(title="OneDriveGUI v1.1.1") # Onedrive
     ],
     border_focus = colors_fg[6],
     border_normal = colors_bg[7],
-    border_width = b_width,
+    border_width = constants.b_width,
     border_on_single = False,
 )
 
@@ -235,269 +265,23 @@ widget_defaults = dict(
 )
 extension_defaults = widget_defaults.copy()
 
-# JetBrains Nerd Font
-fonts = {
-    "regular": "JetBrainsMono NF",
-    "bold": "JetBrainsMono NF Bold",
-    "italic": "JetBrainsMono NF Italic",
-    "bolditalic": "JetBrainsMono NF Bold Italic"
-}
-
 # Qtile Bar that I designed
-screens = [
-    Screen( 
-        top=bar.Bar(
-            [   
-                # Arch Linux logo
-                widget.Sep(
-                    linewidth = 0,
-                    padding = 6,
-                    background=colors_fg[2],
-                ),
-                widget.TextBox(
-                    text='󰣇',
-                    foreground=colors_bg[1],
-                    background=colors_fg[2],
-                    fontsize=24, 
-                    padding=8,        
-                ),
-                widget.Sep(
-                    linewidth = 0,
-                    padding = 5,
-                    background=colors_fg[2],
-                    **powerline_left,
-                ),
-                # Current layout
-                widget.Sep(
-                    linewidth = 0,
-                    padding = 6,
-                ),
-                extrawidget.CurrentLayoutIcon(
-                    **declayout,
-                    use_mask = True,
-                    scale=0.65,
-                    foreground = colors_bg[1],
-                ),
-                widget.CurrentLayout(
-                    **dectext,
-                    colors=colors_fg[5],
-                ),
-                # Group Boxes
-                widget.Sep(
-                    linewidth = 0,
-                    padding = 6,
-                ),
-                widget.GroupBox(
-                    **powerline_left,
-                    fontsize = 16,
-                    margin_x = 1,
-                    padding_x = 1,
-                    borderwidth = 3,
-                    foreground = colors_bg[1],
-                    active = colors_bg[0],
-                    inactive = colors_bg[3],
-                    highlight_color = colors_bg[1],
-                    this_current_screen_border = colors_fg[6],
-                    rounded = False,
-                    disable_drag = True,
-                    center_aligned = True,
-                    highlight_method = "text",
-                ),
-                # Run command
-                widget.Prompt(
-                    **powerline_left,
-                    foreground=colors_bg[5],
-                    fontsize=16,
-                    prompt='➦ Run:',
-                    cursor_color=colors_bg[0],
-                ),
-                # Window name
-                widget.WindowName(
-                    background=colors_bg[2],
-                    fontsize=14,
-                    max_chars=50,
-                    fmt=' {}',
-                    font=fonts["bold"],
-                    center_aligned = True,
-                    for_current_screen = True,
-                ),
-
-                # SPACE HERE #
-                # Do Not Disturb
-                widget.DoNotDisturb(
-                    enabled_icon="󰂛",
-                    disabled_icon="󰂚",
-                    fontsize=17,
-                    background=colors_bg[2],
-                    update_interval = 0.5,
-                ),
-                widget.Sep(
-                    linewidth = 0,
-                    padding = 1,
-                    background=colors_bg[2],
-                ),
-                # System Tray
-                widget.Systray(
-                    background=colors_bg[2],
-                    padding=4,
-                ),
-                widget.Sep(
-                    linewidth = 0,
-                    padding = 6,
-                    background=colors_bg[2],
-                    **powerline_right,
-                ),
-                # Keylock Indicator
-                widget.TextBox(
-                    **deckeyboard,
-                    text='󰌌',
-                    fontsize=18,
-                    foreground=colors_bg[1],
-                ),
-                widget.CapsNumLockIndicator(
-                    **dectext,
-                ),
-                widget.Sep(
-                    linewidth = 0,
-                    padding = 6,
-                ),
-                # Volume management (Pulseaudio)
-                widget.PulseVolume(
-                    **decvol,
-                    emoji=True,
-                    emoji_list=['󰝟', '󰕿', '󰖀', '󰕾'],
-                    fontsize=18,
-                    foreground=colors_bg[1],
-                    padding=6,
-                    device='default',
-                    step=1,
-                ),
-                widget.PulseVolume(
-                    **dectext,
-                    foreground=colors_bg[5],
-                    channel='Master',
-                    step=1,
-                ),
-                widget.Sep(
-                    linewidth = 0,
-                    padding = 6,
-                ),
-                # Brightness control for intel
-                widget.TextBox(
-                    **declight,
-                    text='󰃠',
-                    fontsize=18,
-                    foreground=colors_bg[1]
-                ),
-                widget.Backlight(
-                    **dectext,
-                    backlight_name='intel_backlight',
-                    change_command='backlight_control {0}',
-                    foreground=colors_bg[5],
-                    step=5,
-                ),
-                widget.Sep(
-                    linewidth = 0,
-                    padding = 6,
-                ),
-                # Battery report
-                widget.Battery(
-                    **decbattery,
-                    format='{char}',
-                    empty_char = '󰂃',
-                    charge_char='󰂄',
-                    discharge_char='󰁹',
-                    full_char='󱟢',
-                    unknown_char = '󱉝',
-                    show_short_text=False,
-                    fontsize=18,
-                    padding=8,
-                    foreground=colors_bg[1],
-                    low_foreground="d20f39",
-                ),
-                widget.Battery(
-                    **dectext,
-                    format='{percent:2.0%}',
-                    show_short_text=False,
-                    foreground=colors_bg[5],
-                    low_foreground=colors_bg[5],
-                    padding=6,
-                ),
-                widget.Sep(
-                    linewidth = 0,
-                    padding = 6,
-                ),
-                # Wifi display
-                # NOTE: The ethernet stuff is from a custom implementation I did (PR here: https://github.com/qtile/qtile/pull/4569)
-                widget.Wlan(
-                    **decwifi,
-                    format='󰖩',
-                    foreground=colors_bg[1],
-                    disconnected_message='󰖪',
-                    ethernet_message='󰈀',
-                    fontsize=16,
-                    interface='wlan0',
-                    use_ethernet=True,
-                    ethernet_interface='eno1',
-                    update_interval=5,
-                ),
-                widget.Wlan(
-                    **dectext,
-                    foreground=colors_bg[5],
-                    format='{essid}',
-                    interface='wlan0',
-                    ethernet_interface='eno1',
-                    disconnected_message='Disconnected',
-                    use_ethernet=True,
-                    ethernet_message='Ethernet',
-                    update_interval=5,
-                ),
-                widget.Sep(
-                    linewidth = 0,
-                    padding = 6,
-                ),
-                # Time and date
-                widget.TextBox(
-                    **decdate,
-                    text='󰃭',
-                    foreground=colors_bg[1],
-                    fontsize=18,                   
-                ),
-                widget.Clock(
-                    **dectext,
-                    format='%b %d, %H:%M',
-                    foreground=colors_bg[5],
-                ),
-                widget.Sep(
-                    linewidth = 0,
-                    padding = 2,
-                ),
-                # Exit Qtile
-                widget.Sep(
-                    **powerline_right,
-                    linewidth=0,
-                    padding=6,
-                ),
-                widget.QuickExit(
-                    fontsize = 24,
-                    foreground = colors_bg[1],
-                    background = colors_fg [2],
-                    default_text = '󰗽',
-                    countdown_start = 4,
-                    countdown_format = '{}'
-                ),
-                widget.Sep(
-                    linewidth = 0,
-                    padding = 5,
-                    background=colors_fg[2],
-                ),
-            ],
-            size = 26,
-            margin = mar_g,
-            background=colors_bg[2]
-        ),
-    ),
-]
+if qtile.core.name == "wayland":
+    screens = [
+        Screen(
+            wallpaper='/home/sprinter/Wallpapers/dorito.jpeg',
+            wallpaper_mode='fill',
+            top = wl_widgets.defaultbar
+        )
+    ]
+elif qtile.core.name == "x11":
+    screens = [
+        Screen(
+            wallpaper='/home/sprinter/Wallpapers/dorito.jpeg',
+            wallpaper_mode='fill',
+            top = x11_widgets.defaultbar
+        )
+    ]
 
 # Other Qtile stuff
 dgroups_key_binder = None
@@ -516,7 +300,8 @@ reconfigure_screens = True
 auto_minimize = True
 
 # When using the Wayland backend, this can be used to configure input devices.
-wl_input_rules = None
+if qtile.core.name == "x11":
+    wl_input_rules = None
 
 # XXX: Gasp! We're lying here. In fact, nobody really uses or cares about this
 # string besides java UI toolkits; you can see several discussions on the

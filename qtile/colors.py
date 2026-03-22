@@ -10,6 +10,7 @@ colors_bg = [
     "#cad3f5", #5 - Whity (Text - Macchiato)
     "#494d64", #6 - Black 3 (Surface1 - Macchiato)
     "#1f1d2e", #7 - Black 4 (Not catppuccin)
+    "#00000000" #8 - Transparent (Not catppuccin)
 ]
 
 # Colorful colors
